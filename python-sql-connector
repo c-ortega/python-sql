@@ -1,0 +1,171 @@
+import pymysql
+from datetime import datetime
+
+def createConnection():
+    #add connection credentials
+    return pymysql.connect(
+        host="", 
+        port=000,
+        user="",
+        password="",
+        database=""
+    )
+
+def createTables(conn):
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        create table if not exists Airport (
+            airportId int auto_increment primary key,
+            name varchar(100),
+            city varchar(100),
+            country varchar(100)
+        )
+    """)
+
+    cursor.execute("""
+        create table if not exists FlightSchedule (
+            flightId int auto_increment primary key,
+            flightNumber varchar(10),
+            originId int,
+            destinationId int,
+            departureTime datetime,
+            arrivalTime datetime,
+            foreign key (originId) references Airport(airportId),
+            foreign key (destinationId) references Airport(airportId)
+        )
+    """)
+
+    cursor.execute("""
+        create table if not exists Passenger (
+            passengerId int auto_increment primary key,
+            fullName varchar(100),
+            email varchar(100)
+        )
+    """)
+
+    cursor.execute("""
+        create table if not exists Booking (
+            bookingId int auto_increment primary key,
+            passengerId int,
+            flightId int,
+            bookingDate datetime default current_timestamp,
+            foreign key (passengerId) references Passenger(passengerId),
+            foreign key (flightId) references FlightSchedule(flightId)
+        )
+    """)
+
+    conn.commit()
+    print("All tables created successfully.\n")
+
+
+def sampleData(conn):
+    cursor = conn.cursor()
+
+    cursor.execute("select count(*) from Airport")
+    if cursor.fetchone()[0] == 0:
+        cursor.execute("insert into Airport (name, city, country) values (%s, %s, %s)", ("O'Hare International", "Chicago", "USA"))
+        cursor.execute("insert into Airport (name, city, country) values (%s, %s, %s)", ("Los Angeles International", "Los Angeles", "USA"))
+        cursor.execute("insert into Airport (name, city, country) values (%s, %s, %s)", ("Heathrow", "London", "UK"))
+        cursor.execute("insert into Airport (name, city, country) values (%s, %s, %s)", ("John F. Kennedy International", "New York", "USA"))
+
+    cursor.execute("select count(*) from FlightSchedule")
+    if cursor.fetchone()[0] == 0:
+        cursor.execute("""
+            insert into FlightSchedule (flightNumber, originId, destinationId, departureTime, arrivalTime)
+            values ('FA101', 1, 2, '2025-04-05 08:00:00', '2025-04-05 10:30:00')
+        """)
+        cursor.execute("""
+            insert into FlightSchedule (flightNumber, originId, destinationId, departureTime, arrivalTime)
+            values ('FA102', 2, 1, '2025-04-06 12:00:00', '2025-04-06 14:30:00')
+        """)
+        cursor.execute("""
+            insert into FlightSchedule (flightNumber, originId, destinationId, departureTime, arrivalTime)
+            values ('FA201', 3, 4, '2025-04-07 18:00:00', '2025-04-07 21:00:00')
+        """)
+
+    conn.commit()
+
+
+def insertBooking(conn):
+    cursor = conn.cursor()
+    name = input("Enter full name: ")
+    email = input("Enter email: ")
+
+    cursor.execute("insert into Passenger (fullName, email) values (%s, %s)", (name, email))
+    passengerId = cursor.lastrowid
+
+    cursor.execute("select flightId, flightNumber, departureTime, arrivalTime from FlightSchedule")
+    flights = cursor.fetchall()
+
+    if not flights:
+        print("No flights available.")
+        return
+
+    print("\nAvailable Flights:")
+    for flight in flights:
+        print(f"ID: {flight[0]} | Flight: {flight[1]} | Departs: {flight[2]} | Arrives: {flight[3]}")
+
+    flightId = int(input("Enter flight ID to book: "))
+    cursor.execute("insert into Booking (passengerId, flightId) values (%s, %s)", (passengerId, flightId))
+    conn.commit()
+    print("Booking successful!\n")
+
+
+def viewBooking(conn):
+    email = input("Enter your email to view bookings: ")
+    cursor = conn.cursor()
+    query = """
+        select b.bookingId, f.flightNumber, f.departureTime, f.arrivalTime
+        from Booking b
+        join Passenger p on b.passengerId = p.passengerId
+        join FlightSchedule f on b.flightId = f.flightId
+        where p.email = %s
+    """
+    cursor.execute(query, (email,))
+    bookings = cursor.fetchall()
+
+    if bookings:
+        print("\nYour Bookings:")
+        for b in bookings:
+            print(f"Booking ID: {b[0]}, Flight: {b[1]}, Departure: {b[2]}, Arrival: {b[3]}")
+    else:
+        print("No bookings found.\n")
+
+
+def deleteBooking(conn):
+    bookingId = input("Enter Booking ID to cancel: ")
+    cursor = conn.cursor()
+    cursor.execute("delete from Booking where bookingId = %s", (bookingId,))
+    conn.commit()
+    print("Booking canceled.\n")
+
+
+def main():
+    conn = createConnection()
+    createTables(conn)
+    sampleData(conn)
+
+    while True:
+        print("\n--- Falcon Airlines Booking System ---")
+        print("1. Book a Flight")
+        print("2. View Reservation")
+        print("3. Cancel Reservation")
+        print("4. Exit")
+        choice = input("Enter choice: ")
+
+        if choice == '1':
+            insertBooking(conn)
+        elif choice == '2':
+            viewBooking(conn)
+        elif choice == '3':
+            deleteBooking(conn)
+        elif choice == '4':
+            break
+        else:
+            print("Invalid choice. Try again.")
+
+    conn.close()
+
+if __name__ == "__main__":
+    main()
